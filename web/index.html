@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>goiftop Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .table-sm th, .table-sm td {
+            padding: 0.4rem;
+            vertical-align: middle;
+        }
+        .rate-badge {
+            min-width: 80px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">goiftop</a>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-bordered table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Src Addr</th>
+                        <th>Dst Addr</th>
+                        <th>Dst Location</th>
+                        <th>Src Port</th>
+                        <th>Dst Port</th>
+                        <th>Protocol</th>
+                        <th class="text-end">Inbound</th>
+                        <th class="text-end">Outbound</th>
+                        <th class="text-end">In Rate</th>
+                        <th class="text-end">Out Rate</th>
+                    </tr>
+                </thead>
+                <tbody id="flow-table-body">
+                    <!-- Rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const flowTableBody = document.getElementById('flow-table-body');
+        const intervalSeconds = 2;
+
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function formatRate(bytes, durationSeconds) {
+            if (durationSeconds === 0 || bytes === 0) {
+                return '0 Kbps';
+            }
+            const bits = bytes * 8;
+            const rateBps = bits / durationSeconds;
+            const k = 1000;
+            const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+            const i = Math.floor(Math.log(rateBps) / Math.log(k));
+            if (i == 0) { // for bps
+                 return parseFloat(rateBps.toFixed(0)) + ' ' + sizes[i];
+            }
+            return parseFloat((rateBps / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function fetchFlows() {
+            try {
+                const response = await fetch('/api/v1/flows');
+                if (!response.ok) {
+                    console.error('Failed to fetch flows:', response.statusText);
+                    return;
+                }
+                const flows = await response.json();
+
+                // Sort flows by total bytes (inbound + outbound)
+                if (flows) {
+                    flows.sort((a, b) => (b.InboundBytes + b.OutboundBytes) - (a.InboundBytes + a.OutboundBytes));
+                }
+
+                // Clear existing table data
+                flowTableBody.innerHTML = '';
+
+                // Populate table
+                for (const flow of flows) {
+                    const row = document.createElement('tr');
+                    
+                    const inRate = formatRate(flow.InboundBytes, intervalSeconds);
+                    const outRate = formatRate(flow.OutboundBytes, intervalSeconds);
+
+                    row.innerHTML = `
+                        <td>${flow.SrcAddr}</td>
+                        <td>${flow.DstAddr}</td>
+                        <td>${flow.DstCountry ? `${flow.DstCountry}, ${flow.DstCity}` : 'N/A'}</td>
+                        <td>${flow.SrcPort || '-'}</td>
+                        <td>${flow.DstPort || '-'}</td>
+                        <td>${flow.Protocol || 'L3'}</td>
+                        <td class="text-end">${formatBytes(flow.InboundBytes)}</td>
+                        <td class="text-end">${formatBytes(flow.OutboundBytes)}</td>
+                        <td class="text-end"><span class="badge bg-primary rate-badge">${inRate}</span></td>
+                        <td class="text-end"><span class="badge bg-success rate-badge">${outRate}</span></td>
+                    `;
+                    flowTableBody.appendChild(row);
+                }
+
+            } catch (error) {
+                console.error('Error fetching or processing flows:', error);
+            }
+        }
+
+        // Fetch data immediately and then every 'intervalSeconds'
+        fetchFlows();
+        setInterval(fetchFlows, intervalSeconds * 1000);
+    </script>
+
+</body>
+</html>
