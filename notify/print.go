@@ -115,6 +115,7 @@ func PrintNotifier(ctx context.Context, duration int64) {
 			}
 
 			fmt.Println()
+			}
 		}
 	}
 }
