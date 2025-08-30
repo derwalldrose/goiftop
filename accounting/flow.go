@@ -1,3 +1,5 @@
+package accounting
+
 import (
 	"github.com/fs714/goiftop/utils/geoip"
 	"sync"
